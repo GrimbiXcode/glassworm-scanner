@@ -15,15 +15,59 @@ GlassWorm Scanner is specifically designed to detect GlassWorm, the first self-p
 - Cryptocurrency wallet targeting
 - Solana blockchain and Google Calendar C2 patterns
 
+## Installation
+
+### Option 1: Use directly via npx (recommended for CI/CD)
+
+```bash
+npx glassworm-scanner
+```
+
+### Option 2: Install as dev dependency
+
+```bash
+npm install --save-dev glassworm-scanner
+```
+
+Then use via npm scripts in `package.json`:
+
+```json
+{
+  "scripts": {
+    "security:scan": "glassworm-scanner",
+    "security:scan:ci": "CI=true FAIL_ON=high glassworm-scanner"
+  }
+}
+```
+
+### Option 3: Install globally
+
+```bash
+npm install -g glassworm-scanner
+glassworm-scanner
+```
+
+### Option 4: Clone and run locally
+
+```bash
+git clone https://github.com/GrimbiXcode/glassworm-scanner.git
+cd glassworm-scanner
+node scan-glassworm.js
+```
+
 ## Quick Start
 
 ### Basic Usage
 
 ```bash
 # Scan default location (./node_modules)
+glassworm-scanner
+# or
 node scan-glassworm.js
 
 # Scan a specific directory
+glassworm-scanner /path/to/directory
+# or
 node scan-glassworm.js /path/to/directory
 ```
 
@@ -58,9 +102,24 @@ The scanner returns appropriate exit codes for CI/CD pipelines:
 - **1**: Scan failed (findings detected at or above `FAIL_ON` threshold)
 - **2**: Scanner error (runtime failure)
 
-### GitHub Actions
+### Installing CI/CD Templates
 
-See `.github/workflows/glassworm-scan.yml` for a complete example. Basic integration:
+**GitHub Actions:**
+
+```bash
+mkdir -p .github/workflows
+cp examples/ci-templates/github-actions.yml .github/workflows/glassworm-scan.yml
+```
+
+**GitLab CI:**
+
+```bash
+cp examples/ci-templates/gitlab-ci.yml .gitlab-ci.yml
+```
+
+Or customize in your existing workflows:
+
+### GitHub Actions
 
 ```yaml
 - name: Run GlassWorm Scanner
@@ -69,11 +128,16 @@ See `.github/workflows/glassworm-scan.yml` for a complete example. Basic integra
     CI: true
     FAIL_ON: high  # Fail on high or critical findings
     MIN_SCORE: 60
+
+- name: Upload scan report
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: glassworm-scan-report
+    path: glassworm-scan-report.json
 ```
 
 ### GitLab CI
-
-See `.gitlab-ci.yml` for a complete example. Basic integration:
 
 ```yaml
 glassworm-scan:

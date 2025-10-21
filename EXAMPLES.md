@@ -51,6 +51,8 @@ INSPECT_TIMEOUT=30000 node scan-glassworm.js
 ```bash
 npm run scan
 npm run scan:with-low
+npm run scan:ci              # CI mode - fail on high or critical
+npm run scan:ci:critical     # CI mode - fail only on critical
 ```
 
 ## Real-World Scenarios
@@ -199,19 +201,102 @@ cd /tmp  # or another writable directory
 node /path/to/scan-glassworm.js /path/to/scan
 ```
 
-## Integration Examples
+## CI/CD Integration Examples
 
 ### GitHub Actions workflow
 
+Copy `examples/ci-templates/github-actions.yml` to `.github/workflows/glassworm-scan.yml` in your project.
+
+Or add to existing workflow:
+
 ```yaml
 - name: Security scan with GlassWorm
-  run: |
-    node scan-glassworm.js ./node_modules
-    if [ -s glassworm-scan-report.json ]; then
-      echo "Security issues detected!"
-      jq '.summary' glassworm-scan-report.json
-      exit 1
-    fi
+  run: npx glassworm-scanner
+  env:
+    CI: true
+    FAIL_ON: high  # Fail on high or critical findings
+    MIN_SCORE: 60
+
+- name: Upload scan report
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: glassworm-scan-report
+    path: glassworm-scan-report.json
+```
+
+### GitLab CI pipeline
+
+Copy `examples/ci-templates/gitlab-ci.yml` to `.gitlab-ci.yml` in your project root.
+
+Or add to existing pipeline:
+
+```yaml
+glassworm-scan:
+  stage: security
+  image: node:18
+  variables:
+    CI: "true"
+    FAIL_ON: "high"
+  script:
+    - npm ci
+    - npx glassworm-scanner
+  artifacts:
+    paths:
+      - glassworm-scan-report.json
+```
+
+### Jenkins Pipeline
+
+```groovy
+stage('Security Scan') {
+  steps {
+    sh 'npm ci'
+    sh 'CI=true FAIL_ON=high npx glassworm-scanner'
+  }
+  post {
+    always {
+      archiveArtifacts artifacts: 'glassworm-scan-report.json', allowEmptyArchive: true
+    }
+  }
+}
+```
+
+### CircleCI
+
+```yaml
+jobs:
+  security-scan:
+    docker:
+      - image: node:18
+    steps:
+      - checkout
+      - run: npm ci
+      - run:
+          name: GlassWorm Security Scan
+          command: CI=true FAIL_ON=high npx glassworm-scanner
+      - store_artifacts:
+          path: glassworm-scan-report.json
+```
+
+### Azure Pipelines
+
+```yaml
+- task: Npm@1
+  inputs:
+    command: 'ci'
+
+- script: |
+    export CI=true
+    export FAIL_ON=high
+    npx glassworm-scanner
+  displayName: 'Run GlassWorm Scanner'
+
+- task: PublishBuildArtifacts@1
+  condition: always()
+  inputs:
+    pathToPublish: 'glassworm-scan-report.json'
+    artifactName: 'security-scan-report'
 ```
 
 ### Pre-commit hook
@@ -219,11 +304,30 @@ node /path/to/scan-glassworm.js /path/to/scan
 ```bash
 #!/bin/bash
 # .git/hooks/pre-commit
-node scan-glassworm.js ./node_modules > /tmp/scan.json
-if grep -q '"critical":[^0]' /tmp/scan.json; then
-  echo "Critical security issues detected!"
+
+# Run scanner with strict threshold
+CI=true FAIL_ON=critical node scan-glassworm.js ./node_modules
+
+if [ $? -eq 1 ]; then
+  echo "❌ Critical security issues detected!"
+  echo "Review glassworm-scan-report.json for details."
   exit 1
 fi
+```
+
+### npm scripts for different environments
+
+Add to `package.json`:
+
+```json
+{
+  "scripts": {
+    "security:scan": "node scan-glassworm.js",
+    "security:scan:dev": "MIN_SCORE=50 INCLUDE_LOW=1 node scan-glassworm.js",
+    "security:scan:ci": "CI=true FAIL_ON=high node scan-glassworm.js",
+    "security:scan:prod": "CI=true FAIL_ON=critical MIN_SCORE=80 node scan-glassworm.js"
+  }
+}
 ```
 
 ## Performance Tips
