@@ -28,6 +28,8 @@ const CONCURRENCY = Math.max(2, Math.floor(os.cpus().length / 2));
 const MIN_SCORE = Number(process.env.MIN_SCORE || 60);
 const INCLUDE_LOW = process.env.INCLUDE_LOW === '1';
 const INSPECT_TIMEOUT = Number(process.env.INSPECT_TIMEOUT || 15000);
+const CI_MODE = process.env.CI === 'true' || process.env.CI_MODE === '1';
+const FAIL_ON = process.env.FAIL_ON || 'critical'; // 'critical', 'high', 'medium', 'low', 'none'
 
 const ALLOWED_EXT = new Set(['.js', '.mjs', '.cjs', '.ts', '.json', '.jsx', '.tsx']);
 const IGNORE_FILES = new Set([
@@ -388,7 +390,7 @@ async function main() {
   const total = queue.length;
   const startTime = Date.now();
   
-  const progressInterval = setInterval(() => {
+  const progressInterval = CI_MODE ? null : setInterval(() => {
     const pct = total > 0 ? Math.floor((processed / total) * 100) : 0;
     const elapsed = Math.floor((Date.now() - startTime) / 1000);
     process.stdout.write(`\rProgress: ${processed}/${total} (${pct}%) | ${elapsed}s elapsed | ${out.length} findings | ${skipped.length} skipped`);
@@ -417,9 +419,14 @@ async function main() {
   });
   await Promise.all(workers);
   
-  clearInterval(progressInterval);
-  process.stdout.write(`\rProgress: ${processed}/${total} (100%) | ${Math.floor((Date.now() - startTime) / 1000)}s elapsed | ${out.length} findings | ${skipped.length} skipped\n`);
-  console.log('\nInspection complete.');
+  if (progressInterval) clearInterval(progressInterval);
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+  if (CI_MODE) {
+    console.log(`Scanned ${processed}/${total} files in ${elapsed}s | ${out.length} findings | ${skipped.length} skipped`);
+  } else {
+    process.stdout.write(`\rProgress: ${processed}/${total} (100%) | ${elapsed}s elapsed | ${out.length} findings | ${skipped.length} skipped\n`);
+    console.log('\nInspection complete.');
+  }
   
   if (skipped.length) {
     console.log(`\n${skipped.length} files skipped due to timeout:`);
@@ -446,23 +453,44 @@ async function main() {
   };
 
   const printable = ['critical','high','medium'].flatMap(k => (grouped[k] || [])).slice(0, 500);
-  console.log(`GlassWorm scan summary @ ${result.scannedPath}`);
+  console.log(`\nGlassWorm scan summary @ ${result.scannedPath}`);
   console.table(summary);
-  console.log('\nTop findings:');
-  for (const r of printable) {
-    console.log(`[${r.level.toUpperCase()} ${r.score}] ${r.file}`);
-    const s = Object.keys(r.signals).join(', ');
-    console.log(`  signals: ${s}`);
-    if (r.details.invisIdentifiers) console.log(`  invisIdentifiers: ${r.details.invisIdentifiers.join(', ')}`);
-    if (r.details.ips) console.log(`  ips: ${r.details.ips.join(', ')}`);
-    if (r.details.pkgScripts) console.log(`  pkgScripts: ${JSON.stringify(r.details.pkgScripts)}`);
-    if (r.details.pkgExecNet) console.log(`  pkgExecNet: ${JSON.stringify(r.details.pkgExecNet)}`);
-    if (r.details.base64) console.log(`  base64-decoded: ${r.details.base64.map(x => x.decodedPreview).join(' | ')}`);
-    if (r.details.suspiciousWords) console.log(`  suspiciousWords: ${r.details.suspiciousWords.match} …${r.details.suspiciousWords.snippet}…`);
+  
+  if (!CI_MODE || printable.length > 0) {
+    console.log('\nTop findings:');
+    for (const r of printable) {
+      console.log(`[${r.level.toUpperCase()} ${r.score}] ${r.file}`);
+      const s = Object.keys(r.signals).join(', ');
+      console.log(`  signals: ${s}`);
+      if (r.details.invisIdentifiers) console.log(`  invisIdentifiers: ${r.details.invisIdentifiers.join(', ')}`);
+      if (r.details.ips) console.log(`  ips: ${r.details.ips.join(', ')}`);
+      if (r.details.pkgScripts) console.log(`  pkgScripts: ${JSON.stringify(r.details.pkgScripts)}`);
+      if (r.details.pkgExecNet) console.log(`  pkgExecNet: ${JSON.stringify(r.details.pkgExecNet)}`);
+      if (r.details.base64) console.log(`  base64-decoded: ${r.details.base64.map(x => x.decodedPreview).join(' | ')}`);
+      if (r.details.suspiciousWords) console.log(`  suspiciousWords: ${r.details.suspiciousWords.match} …${r.details.suspiciousWords.snippet}…`);
+    }
   }
 
   await fs.writeFile('glassworm-scan-report.json', JSON.stringify(result, null, 2), 'utf8');
   console.log('\nReport written to ./glassworm-scan-report.json');
+  
+  // Determine exit code based on FAIL_ON threshold
+  let exitCode = 0;
+  if (FAIL_ON !== 'none') {
+    const levels = ['critical', 'high', 'medium', 'low'];
+    const failIndex = levels.indexOf(FAIL_ON);
+    if (failIndex >= 0) {
+      const shouldFail = levels.slice(0, failIndex + 1).some(level => summary[level] > 0);
+      if (shouldFail) {
+        exitCode = 1;
+        console.log(`\n❌ Scan failed: Found ${summary.critical || 0} critical, ${summary.high || 0} high, ${summary.medium || 0} medium, ${summary.low || 0} low severity findings (threshold: ${FAIL_ON})`);
+      } else {
+        console.log(`\n✅ Scan passed: No findings at or above ${FAIL_ON} severity threshold`);
+      }
+    }
+  }
+  
+  process.exit(exitCode);
 }
 
 main().catch(e => { console.error(e); process.exit(2); });

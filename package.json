@@ -10,7 +10,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "scan": "node scan-glassworm.js",
-    "scan:with-low": "INCLUDE_LOW=1 node scan-glassworm.js"
+    "scan:with-low": "INCLUDE_LOW=1 node scan-glassworm.js",
+    "scan:ci": "CI=true FAIL_ON=high node scan-glassworm.js",
+    "scan:ci:critical": "CI=true FAIL_ON=critical node scan-glassworm.js"
   },
   "keywords": [
     "security",

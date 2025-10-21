@@ -32,6 +32,8 @@ node scan-glassworm.js /path/to/directory
 - `MIN_SCORE` (default: 60) - Minimum severity score to report
 - `INCLUDE_LOW` (default: 0) - Set to '1' to include low-severity findings
 - `INSPECT_TIMEOUT` (default: 15000) - Timeout in milliseconds for inspecting each file
+- `CI` (default: false) - Set to 'true' for CI-friendly output (no progress bars)
+- `FAIL_ON` (default: 'critical') - Exit code threshold: 'critical', 'high', 'medium', 'low', or 'none'
 
 ### Examples
 
@@ -46,11 +48,83 @@ INCLUDE_LOW=1 node scan-glassworm.js
 INSPECT_TIMEOUT=30000 node scan-glassworm.js
 ```
 
+## CI/CD Integration
+
+### Exit Codes
+
+The scanner returns appropriate exit codes for CI/CD pipelines:
+
+- **0**: Scan passed (no findings at or above `FAIL_ON` threshold)
+- **1**: Scan failed (findings detected at or above `FAIL_ON` threshold)
+- **2**: Scanner error (runtime failure)
+
+### GitHub Actions
+
+See `.github/workflows/glassworm-scan.yml` for a complete example. Basic integration:
+
+```yaml
+- name: Run GlassWorm Scanner
+  run: npx glassworm-scanner
+  env:
+    CI: true
+    FAIL_ON: high  # Fail on high or critical findings
+    MIN_SCORE: 60
+```
+
+### GitLab CI
+
+See `.gitlab-ci.yml` for a complete example. Basic integration:
+
+```yaml
+glassworm-scan:
+  stage: security
+  image: node:18
+  variables:
+    CI: "true"
+    FAIL_ON: "high"
+  script:
+    - npm ci
+    - npx glassworm-scanner
+  artifacts:
+    paths:
+      - glassworm-scan-report.json
+```
+
+### Other CI Systems
+
+**Jenkins:**
+```groovy
+stage('Security Scan') {
+  steps {
+    sh 'CI=true FAIL_ON=high npx glassworm-scanner'
+    archiveArtifacts artifacts: 'glassworm-scan-report.json'
+  }
+}
+```
+
+**CircleCI:**
+```yaml
+- run:
+    name: GlassWorm Security Scan
+    command: CI=true FAIL_ON=high npx glassworm-scanner
+- store_artifacts:
+    path: glassworm-scan-report.json
+```
+
+**Azure Pipelines:**
+```yaml
+- script: |
+    export CI=true
+    export FAIL_ON=high
+    npx glassworm-scanner
+  displayName: 'Run GlassWorm Scanner'
+```
+
 ## Output
 
 The scanner produces:
 
-- Real-time progress output to console with processing statistics
+- Real-time progress output to console (or CI-friendly output when `CI=true`)
 - Summary table with findings organized by severity level
 - Detailed findings written to `glassworm-scan-report.json`
 

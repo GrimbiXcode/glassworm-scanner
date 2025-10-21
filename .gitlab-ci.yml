@@ -1,0 +1,32 @@
+stages:
+  - security
+
+glassworm-scan:
+  stage: security
+  image: node:18
+  
+  variables:
+    CI: "true"
+    FAIL_ON: "high"  # Fail on high or critical findings
+    MIN_SCORE: "60"
+  
+  before_script:
+    - npm ci
+  
+  script:
+    - npx glassworm-scanner
+  
+  artifacts:
+    when: always
+    reports:
+      # GitLab will display this in the security dashboard
+      sast: glassworm-scan-report.json
+    paths:
+      - glassworm-scan-report.json
+    expire_in: 30 days
+  
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
