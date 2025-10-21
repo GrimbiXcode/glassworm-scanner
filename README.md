@@ -251,10 +251,14 @@ All findings are written to `glassworm-scan-report.json` with full details. Top 
 
 ## Security Context
 
-This scanner detects attacks by GlassWorm, discovered in October 2025. GlassWorm uses:
+This scanner detects attacks by GlassWorm, discovered in October 2025. GlassWorm is the world's first self-propagating worm targeting VS Code extensions on OpenVSX marketplace, using invisible Unicode characters to hide malicious code.
+
+GlassWorm uses:
 
 - Invisible Unicode variation selectors to hide malicious code in npm packages
 - Solana blockchain transactions (reading memo fields) as C2
 - Google Calendar events as backup C2 infrastructure
 - Targets 49+ cryptocurrency wallet browser extensions
 - Steals credentials (NPM, GitHub, Git, OpenVSX tokens) for self-propagation
+
+**Learn more:** [GlassWorm: First Self-Propagating Worm Using Invisible Code Hits OpenVSX Marketplace](https://www.koi.ai/blog/glassworm-first-self-propagating-worm-using-invisible-code-hits-openvsx-marketplace) (Koi Security Research)
